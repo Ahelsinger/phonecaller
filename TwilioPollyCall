@@ -1,0 +1,83 @@
+import boto3
+from twilio.rest import Client
+from pydub import AudioSegment
+import time
+
+account_sid = "YOURVTWILIOCSID"
+auth_token = "YOUR_TWILIO_AUTH"
+
+# Initialize the boto3 session with explicit credentials
+session = boto3.Session(
+    aws_access_key_id='YOUR_AWS_ACCESSS_KEY',
+    aws_secret_access_key='YOUR_AWS_SECRET_KEY',
+    region_name='us-west-2'
+)
+
+
+# Convert text to speech using Amazon Polly
+def text_to_speech(text, output_filename):
+    polly_client = session.client('polly')
+    response = polly_client.synthesize_speech(Text=text,
+                                              OutputFormat='mp3',
+                                              VoiceId='Justin')
+    with open(output_filename, 'wb') as f:
+        f.write(response['AudioStream'].read())
+
+
+# Convert MP3 to MPEG
+def convert_mp3_to_mpeg(mp3_path, mpeg_path):
+    audio = AudioSegment.from_mp3(mp3_path)
+    audio.export(mpeg_path, format="mp4", codec="libmp3lame")
+
+
+# Upload audio file to S3
+def upload_to_s3(filename, bucket_name, object_name):
+    s3_client = session.client('s3')
+    s3_client.upload_file(filename, bucket_name, object_name, ExtraArgs={'ContentType': "audio/mpeg"})
+
+
+# Make a phone call using Twilio, play the audio, and record the response
+def make_and_record_call(audio_url, to_number):
+    client = Client(account_sid, auth_token)
+
+
+    call = client.calls.create(
+        url=twiml_bin_url,
+        to=to_number,
+        from_='YOUR_PHONE_NUMBER'  # Replace with your Twilio number
+    )
+    print(call.sid)
+    # You'd wait or listen for the recording completion event and then get the URL of the recorded audio
+
+
+# Convert recorded audio to text using Amazon Transcribe
+def audio_to_text(audio_url):
+    transcribe_client = session.client('transcribe')
+    job_name = "SomeUniqueJobName"  # Generate a unique job name for each transcription
+    response = transcribe_client.start_transcription_job(
+        TranscriptionJobName=job_name,
+        Media={'MediaFileUri': audio_url},
+        MediaFormat='mp3',  # Ensure you're providing the correct format
+        LanguageCode='en-US'
+    )
+    # Check for the completion of the transcription job and get the result
+
+
+# Main execution
+text = "Hello" # What do you want the voice to say when the recipient answers the call?
+# Change the TwiML Bin URL to record after playing the audio
+twiml_bin_url = "YOUR_TWILIO_BIN"
+
+output_filename_mp3 = "output.mp3"
+text_to_speech(text, output_filename_mp3)
+
+output_filename_mpeg = "output.mpeg"
+convert_mp3_to_mpeg(output_filename_mp3, output_filename_mpeg)
+
+upload_to_s3(output_filename_mpeg, "YOUR_FILE_NAME", "output.mpeg")
+
+# Introducing a delay of 5 seconds to ensure the file is accessible by Twilio
+time.sleep(5)
+
+# Make a call and record the recipient's response
+make_and_record_call(twiml_bin_url, "NUMBER_TO_CALL")
